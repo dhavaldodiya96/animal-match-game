@@ -3,7 +3,7 @@ import { Dimensions, View, Text, StyleSheet } from "react-native";
 
 const GRID_SIZE = 7;
 const TILE_SIZE = Dimensions.get("window").width / GRID_SIZE;
-const animalEmojis = ["🐶", "🐱", "🐭", "🐰", "🦊", "🐻"];
+const animalEmojis = ["🐶", "🐒", "🐭", "🦁", "🐯", "🐻"];
 
 const tileColors = [
   "#FFCDD2",
@@ -18,11 +18,34 @@ const getRandomColor = () => {
   return tileColors[Math.floor(Math.random() * tileColors.length)];
 };
 
-const generateBoard = () =>
-  Array.from(
-    { length: GRID_SIZE * GRID_SIZE },
-    () => animalEmojis[Math.floor(Math.random() * animalEmojis.length)]
-  );
+const generateBoard = () => {
+  const newBoard: string[] = [];
+
+  for (let row = 0; row < GRID_SIZE; row++) {
+    for (let col = 0; col < GRID_SIZE; col++) {
+      let newEmoji;
+      let tries = 0;
+
+      do {
+        newEmoji =
+          animalEmojis[Math.floor(Math.random() * animalEmojis.length)];
+        tries++;
+      } while (
+        tries < 10 &&
+        ((col >= 2 &&
+          newEmoji === newBoard[row * GRID_SIZE + col - 1] &&
+          newEmoji === newBoard[row * GRID_SIZE + col - 2]) ||
+          (row >= 2 &&
+            newEmoji === newBoard[(row - 1) * GRID_SIZE + col] &&
+            newEmoji === newBoard[(row - 2) * GRID_SIZE + col]))
+      );
+
+      newBoard.push(newEmoji);
+    }
+  }
+  console.log("Generated Board:", newBoard);
+  return newBoard;
+};
 
 const HomeScreen = () => {
   const [imojiBoard] = useState(generateBoard());
