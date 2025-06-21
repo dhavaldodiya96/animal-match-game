@@ -8,21 +8,55 @@ import {
   GestureResponderEvent,
   PanResponderGestureState,
 } from "react-native";
+import { Audio } from "expo-av";
 
 const GRID_SIZE = 6;
 const TILE_SIZE = Dimensions.get("window").width / GRID_SIZE;
 const animalEmojis = ["🐶", "🐱", "🐭", "🐰", "🦊", "🐻"];
 
 const generateBoard = () => {
-  const board = [];
+  const board: string[] = [];
+
   for (let i = 0; i < GRID_SIZE * GRID_SIZE; i++) {
-    board.push(animalEmojis[Math.floor(Math.random() * animalEmojis.length)]);
+    let isValid = false;
+    let emoji = "";
+
+    while (!isValid) {
+      emoji = animalEmojis[Math.floor(Math.random() * animalEmojis.length)];
+      isValid = true;
+
+      const row = Math.floor(i / GRID_SIZE);
+      const col = i % GRID_SIZE;
+
+      // Horizontal check
+      if (col >= 2 && board[i - 1] === emoji && board[i - 2] === emoji) {
+        isValid = false;
+      }
+
+      // Vertical check
+      if (
+        row >= 2 &&
+        board[i - GRID_SIZE] === emoji &&
+        board[i - 2 * GRID_SIZE] === emoji
+      ) {
+        isValid = false;
+      }
+    }
+
+    board.push(emoji);
   }
   return board;
 };
 
 const HomeScreen = () => {
   const [imojiBoard, setImojiBoard] = useState(generateBoard());
+
+  const playSwipeSound = async () => {
+    const { sound } = await Audio.Sound.createAsync(
+      require("../../assets/sounds/swipe.mp3") // You must add this sound file
+    );
+    await sound.playAsync();
+  };
 
   const getSwapIndex = (fromIndex: number, direction: string) => {
     const row = Math.floor(fromIndex / GRID_SIZE);
@@ -42,7 +76,7 @@ const HomeScreen = () => {
     }
   };
 
-  const handleSwipe = (fromIndex: number, direction: string) => {
+  const handleSwipe = async (fromIndex: number, direction: string) => {
     const toIndex = getSwapIndex(fromIndex, direction);
     if (toIndex === -1) return;
 
@@ -52,6 +86,7 @@ const HomeScreen = () => {
       newBoard[fromIndex],
     ];
     setImojiBoard(newBoard);
+    await playSwipeSound();
   };
 
   const createPanResponder = (index: number) =>
@@ -117,6 +152,7 @@ const styles = StyleSheet.create({
     backgroundColor: "#FFF9C4",
     borderWidth: 1,
     borderColor: "#ccc",
+    padding: 10,
   },
   emoji: {
     fontSize: 30,
