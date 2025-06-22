@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import {
   Dimensions,
   View,
@@ -50,12 +50,34 @@ const generateBoard = () => {
 
 const HomeScreen = () => {
   const [imojiBoard, setImojiBoard] = useState(generateBoard());
+  const soundRef = useRef<Audio.Sound | null>(null);
+
+  useEffect(() => {
+    const loadSound = async () => {
+      const { sound } = await Audio.Sound.createAsync(
+        require("../../assets/sounds/swipe.mp3")
+      );
+      soundRef.current = sound;
+    };
+
+    loadSound();
+
+    return () => {
+      // Cleanup sound when component unmounts
+      if (soundRef.current) {
+        soundRef.current.unloadAsync();
+      }
+    };
+  }, []);
 
   const playSwipeSound = async () => {
-    const { sound } = await Audio.Sound.createAsync(
-      require("../../assets/sounds/swipe.mp3") // You must add this sound file
-    );
-    await sound.playAsync();
+    try {
+      if (soundRef.current) {
+        await soundRef.current.replayAsync(); // ✅ use replay instead of create new
+      }
+    } catch (error) {
+      console.warn("Swipe sound error:", error);
+    }
   };
 
   const getSwapIndex = (fromIndex: number, direction: string) => {
