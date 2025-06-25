@@ -48,6 +48,81 @@ const generateBoard = () => {
   return board;
 };
 
+// Match 3+ emojis
+const findMatches = (board: string[], gridSize: number): number[] => {
+  const matches: Set<number> = new Set();
+
+  // Horizontal
+  for (let row = 0; row < gridSize; row++) {
+    for (let col = 0; col < gridSize - 2; col++) {
+      const idx = row * gridSize + col;
+      const emoji = board[idx];
+      if (emoji && board[idx + 1] === emoji && board[idx + 2] === emoji) {
+        matches.add(idx);
+        matches.add(idx + 1);
+        matches.add(idx + 2);
+      }
+    }
+  }
+
+  // Vertical
+  for (let col = 0; col < gridSize; col++) {
+    for (let row = 0; row < gridSize - 2; row++) {
+      const idx = row * gridSize + col;
+      const emoji = board[idx];
+      if (
+        emoji &&
+        board[idx + gridSize] === emoji &&
+        board[idx + gridSize * 2] === emoji
+      ) {
+        matches.add(idx);
+        matches.add(idx + gridSize);
+        matches.add(idx + gridSize * 2);
+      }
+    }
+  }
+
+  return Array.from(matches);
+};
+
+const removeAndCollapse = (
+  board: string[],
+  matchedIndices: number[]
+): string[] => {
+  const newBoard = [...board];
+
+  // Clear matched tiles
+  for (let index of matchedIndices) {
+    newBoard[index] = "";
+  }
+
+  // Collapse columns
+  for (let col = 0; col < GRID_SIZE; col++) {
+    const column: string[] = [];
+
+    // Pull down non-empty emojis
+    for (let row = GRID_SIZE - 1; row >= 0; row--) {
+      const idx = row * GRID_SIZE + col;
+      if (newBoard[idx] !== "") column.push(newBoard[idx]);
+    }
+
+    // Fill remaining with new random emojis
+    while (column.length < GRID_SIZE) {
+      const newEmoji =
+        animalEmojis[Math.floor(Math.random() * animalEmojis.length)];
+      column.push(newEmoji);
+    }
+
+    // Write column back to board
+    for (let row = GRID_SIZE - 1; row >= 0; row--) {
+      const idx = row * GRID_SIZE + col;
+      newBoard[idx] = column[GRID_SIZE - 1 - row];
+    }
+  }
+
+  return newBoard;
+};
+
 const HomeScreen = () => {
   const [imojiBoard, setImojiBoard] = useState(generateBoard());
   const soundRef = useRef<Audio.Sound | null>(null);
@@ -107,8 +182,29 @@ const HomeScreen = () => {
       newBoard[toIndex],
       newBoard[fromIndex],
     ];
-    setImojiBoard(newBoard);
-    await playSwipeSound();
+    const matched = findMatches(newBoard, GRID_SIZE);
+
+    if (matched.length > 0) {
+      await playSwipeSound();
+
+      let updatedBoard = removeAndCollapse(newBoard, matched);
+
+      // Keep checking for new matches after collapsing
+      while (true) {
+        const nextMatches = findMatches(updatedBoard, GRID_SIZE);
+        if (nextMatches.length === 0) break;
+        updatedBoard = removeAndCollapse(updatedBoard, nextMatches);
+      }
+
+      setImojiBoard(updatedBoard);
+    } else {
+      // No match, revert the swap
+      [newBoard[fromIndex], newBoard[toIndex]] = [
+        newBoard[toIndex],
+        newBoard[fromIndex],
+      ];
+      setImojiBoard(newBoard);
+    }
   };
 
   const createPanResponder = (index: number) =>
