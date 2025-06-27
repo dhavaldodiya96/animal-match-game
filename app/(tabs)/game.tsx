@@ -8,45 +8,13 @@ import {
   GestureResponderEvent,
   PanResponderGestureState,
 } from "react-native";
-import { Audio } from "expo-av";
+import EmojiTile from "../../components/emojiTile";
+import { useSwipeSound } from "../../hooks/useSwipe";
+import { generateBoard } from "../../app/utils/gameLogic";
 
 const GRID_SIZE = 6;
 const TILE_SIZE = Dimensions.get("window").width / GRID_SIZE;
 const animalEmojis = ["🐶", "🐱", "🐭", "🐰", "🦊", "🐻"];
-
-const generateBoard = () => {
-  const board: string[] = [];
-
-  for (let i = 0; i < GRID_SIZE * GRID_SIZE; i++) {
-    let isValid = false;
-    let emoji = "";
-
-    while (!isValid) {
-      emoji = animalEmojis[Math.floor(Math.random() * animalEmojis.length)];
-      isValid = true;
-
-      const row = Math.floor(i / GRID_SIZE);
-      const col = i % GRID_SIZE;
-
-      // Horizontal check
-      if (col >= 2 && board[i - 1] === emoji && board[i - 2] === emoji) {
-        isValid = false;
-      }
-
-      // Vertical check
-      if (
-        row >= 2 &&
-        board[i - GRID_SIZE] === emoji &&
-        board[i - 2 * GRID_SIZE] === emoji
-      ) {
-        isValid = false;
-      }
-    }
-
-    board.push(emoji);
-  }
-  return board;
-};
 
 // Match 3+ emojis
 const findMatches = (board: string[], gridSize: number): number[] => {
@@ -125,35 +93,8 @@ const removeAndCollapse = (
 
 const HomeScreen = () => {
   const [imojiBoard, setImojiBoard] = useState(generateBoard());
-  const soundRef = useRef<Audio.Sound | null>(null);
-
-  useEffect(() => {
-    const loadSound = async () => {
-      const { sound } = await Audio.Sound.createAsync(
-        require("../../assets/sounds/swipe.mp3")
-      );
-      soundRef.current = sound;
-    };
-
-    loadSound();
-
-    return () => {
-      // Cleanup sound when component unmounts
-      if (soundRef.current) {
-        soundRef.current.unloadAsync();
-      }
-    };
-  }, []);
-
-  const playSwipeSound = async () => {
-    try {
-      if (soundRef.current) {
-        await soundRef.current.replayAsync(); // ✅ use replay instead of create new
-      }
-    } catch (error) {
-      console.warn("Swipe sound error:", error);
-    }
-  };
+  const { playSwipeSound } = useSwipeSound();
+  const [markedForRemoval, setMarkedForRemoval] = useState<number[]>([]);
 
   const getSwapIndex = (fromIndex: number, direction: string) => {
     const row = Math.floor(fromIndex / GRID_SIZE);
@@ -182,23 +123,43 @@ const HomeScreen = () => {
       newBoard[toIndex],
       newBoard[fromIndex],
     ];
+
     const matched = findMatches(newBoard, GRID_SIZE);
 
     if (matched.length > 0) {
       await playSwipeSound();
 
-      let updatedBoard = removeAndCollapse(newBoard, matched);
+      // Step 1: Mark matched
+      setImojiBoard(newBoard);
+      setMarkedForRemoval(matched);
 
-      // Keep checking for new matches after collapsing
-      while (true) {
-        const nextMatches = findMatches(updatedBoard, GRID_SIZE);
-        if (nextMatches.length === 0) break;
-        updatedBoard = removeAndCollapse(updatedBoard, nextMatches);
-      }
+      // Step 2: Animate delay before removing
+      setTimeout(() => {
+        let updatedBoard = removeAndCollapse(newBoard, matched);
+        setMarkedForRemoval([]);
+        setImojiBoard([...updatedBoard]);
 
-      setImojiBoard(updatedBoard);
+        // Step 3: Handle chain matches recursively with animation
+        const processChainMatches = (board: string[]) => {
+          const nextMatches = findMatches(board, GRID_SIZE);
+          if (nextMatches.length > 0) {
+            setMarkedForRemoval(nextMatches);
+
+            setTimeout(() => {
+              const nextBoard = removeAndCollapse(board, nextMatches);
+              setMarkedForRemoval([]);
+              setImojiBoard([...nextBoard]);
+              processChainMatches(nextBoard);
+            }, 300); // wait 300ms before next collapse
+          }
+        };
+
+        setTimeout(() => {
+          processChainMatches(updatedBoard);
+        }, 200); // wait for refill effect
+      }, 300); // wait before first removal
     } else {
-      // No match, revert the swap
+      // No match, revert
       [newBoard[fromIndex], newBoard[toIndex]] = [
         newBoard[toIndex],
         newBoard[fromIndex],
@@ -234,14 +195,16 @@ const HomeScreen = () => {
     <View style={styles.container}>
       <Text style={styles.title}>Animal Match Game</Text>
       <View style={styles.grid}>
-        {imojiBoard.map((emoji, index) => {
-          const panResponder = createPanResponder(index);
-          return (
-            <View key={index} style={styles.tile} {...panResponder.panHandlers}>
-              <Text style={styles.emoji}>{emoji}</Text>
-            </View>
-          );
-        })}
+        {imojiBoard.map((emoji, index) => (
+          <EmojiTile
+            key={index}
+            emoji={emoji}
+            index={index}
+            marked={markedForRemoval.includes(index)}
+            panHandlers={createPanResponder(index).panHandlers}
+            tileSize={TILE_SIZE}
+          />
+        ))}
       </View>
     </View>
   );
@@ -274,6 +237,10 @@ const styles = StyleSheet.create({
   },
   emoji: {
     fontSize: 30,
+  },
+  emojiMarked: {
+    // opacity: 0.3,
+    transform: [{ scale: 0.8 }],
   },
 });
 
